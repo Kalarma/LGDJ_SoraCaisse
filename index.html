@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Analyse Journal de Caisse — Les Gentlemen du Jeu</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500;600&display=swap');
 
@@ -584,6 +585,10 @@
     from { opacity: 0; transform: translateY(8px); }
     to { opacity: 1; transform: translateY(0); }
   }
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
   .fade-in { animation: fadeIn 0.3s ease forwards; }
 
   /* PROGRESS BAR */
@@ -618,13 +623,13 @@
       Le fichier est analysé localement — aucune donnée n'est envoyée.
     </div>
     <button class="btn btn-primary" onclick="event.stopPropagation(); document.getElementById('file-input').click()">
-      📄 Choisir un fichier
+      📄 Choisir un fichier PDF ou TXT
     </button>
     &nbsp;
     <button class="btn btn-outline" onclick="event.stopPropagation(); loadDemo()">
       ✦ Charger la démo (1–13 mars)
     </button>
-    <input type="file" id="file-input" accept=".txt,.pdf,.csv" onchange="handleFile(event)">
+    <input type="file" id="file-input" accept=".txt,.pdf" onchange="handleFile(event)">
   </div>
 
   <!-- DASHBOARD -->
@@ -1527,21 +1532,116 @@ function resetDashboard() {
 // ============================================================
 // FILE HANDLING
 // ============================================================
+
+// Configure PDF.js worker
+if (typeof pdfjsLib !== 'undefined') {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
+
+function showLoading(msg) {
+  const up = document.getElementById('upload-section');
+  up.innerHTML = `
+    <div class="upload-icon" style="animation:spin 1s linear infinite;display:inline-block">⚙️</div>
+    <div class="upload-title" style="margin-top:16px">${msg}</div>
+    <div class="upload-sub">Veuillez patienter…</div>
+  `;
+}
+
 async function handleFile(event) {
   const file = event.target.files[0];
   if (!file) return;
-  let text = '';
-  if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
-    alert('Pour les PDF, veuillez d\'abord copier le texte du PDF (Ctrl+A, Ctrl+C) et le coller dans un fichier .txt, puis importer ce fichier .txt.\n\nOu utilisez la démo intégrée pour tester.');
-    return;
+
+  if (file.name.endsWith('.pdf') || file.type === 'application/pdf') {
+    showLoading('Lecture du PDF en cours…');
+    try {
+      const text = await extractTextFromPDF(file);
+      if (!text || text.trim().length < 50) {
+        resetUploadUI();
+        alert('Le PDF semble vide ou non lisible. Essayez d\'exporter votre journal en .txt depuis votre logiciel de caisse.');
+        return;
+      }
+      processText(text);
+    } catch(e) {
+      resetUploadUI();
+      alert('Erreur lors de la lecture du PDF : ' + e.message);
+    }
+  } else {
+    const text = await file.text();
+    processText(text);
   }
-  text = await file.text();
-  processText(text);
+}
+
+async function extractTextFromPDF(file) {
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  let fullText = '';
+
+  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+    const page = await pdf.getPage(pageNum);
+    const content = await page.getTextContent();
+
+    // Extract items with their positions for correct reading order
+    const items = content.items;
+
+    // Sort by Y position (top to bottom), then X (left to right)
+    // PDF Y axis is bottom-up, so higher Y = higher on page
+    const sorted = [...items].sort((a, b) => {
+      const yDiff = b.transform[5] - a.transform[5];
+      if (Math.abs(yDiff) > 3) return yDiff;
+      return a.transform[4] - b.transform[4];
+    });
+
+    // Group items into lines by Y position
+    const lines = [];
+    let currentLine = [];
+    let lastY = null;
+
+    for (const item of sorted) {
+      const y = Math.round(item.transform[5]);
+      if (lastY === null || Math.abs(y - lastY) > 3) {
+        if (currentLine.length > 0) lines.push(currentLine);
+        currentLine = [item];
+        lastY = y;
+      } else {
+        currentLine.push(item);
+      }
+    }
+    if (currentLine.length > 0) lines.push(currentLine);
+
+    // Join each line's text
+    for (const line of lines) {
+      const lineText = line.map(i => i.str).join(' ').trim();
+      if (lineText) fullText += lineText + '\n';
+    }
+    fullText += '\n';
+  }
+
+  return fullText;
+}
+
+function resetUploadUI() {
+  document.getElementById('upload-section').innerHTML = `
+    <div class="upload-icon">📂</div>
+    <div class="upload-title">Importer un journal de caisse</div>
+    <div class="upload-sub">
+      Glissez-déposez votre fichier PDF ou texte exporté depuis votre logiciel de caisse.<br>
+      Le fichier est analysé localement — aucune donnée n'est envoyée.
+    </div>
+    <button class="btn btn-primary" onclick="event.stopPropagation(); document.getElementById('file-input').click()">
+      📄 Choisir un fichier PDF ou TXT
+    </button>
+    &nbsp;
+    <button class="btn btn-outline" onclick="event.stopPropagation(); loadDemo()">
+      ✦ Charger la démo (1–13 mars)
+    </button>
+    <input type="file" id="file-input" accept=".txt,.pdf" onchange="handleFile(event)">
+  `;
 }
 
 function processText(text) {
   const txs = parseJournalV2(text);
   if (txs.length === 0) {
+    resetUploadUI();
     alert('Aucune transaction trouvée. Vérifiez le format du fichier.');
     return;
   }
@@ -1559,8 +1659,15 @@ uploadSection.addEventListener('drop', async e => {
   uploadSection.classList.remove('drag-over');
   const file = e.dataTransfer.files[0];
   if (!file) return;
-  if (file.name.endsWith('.pdf')) {
-    alert('Pour les PDF, exportez d\'abord en texte (.txt).');
+  if (file.name.endsWith('.pdf') || file.type === 'application/pdf') {
+    showLoading('Lecture du PDF en cours…');
+    try {
+      const text = await extractTextFromPDF(file);
+      processText(text);
+    } catch(err) {
+      resetUploadUI();
+      alert('Erreur PDF : ' + err.message);
+    }
     return;
   }
   const text = await file.text();
