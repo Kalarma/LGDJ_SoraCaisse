@@ -611,6 +611,9 @@
       <div class="logo">Les <span>Gentlemen</span> du Jeu</div>
       <div class="header-sep">—</div>
       <div class="header-title">Analyse Journal de Caisse</div>
+      <div style="margin-left:auto">
+        <button id="debug-btn" onclick="toggleDebug()" class="btn btn-outline" style="font-size:11px;padding:6px 12px;opacity:0.5">🐛 Debug</button>
+      </div>
     </div>
   </header>
 
@@ -1638,14 +1641,295 @@ function resetUploadUI() {
   `;
 }
 
+// ============================================================
+// DEBUG MODE
+// ============================================================
+let debugMode = false;
+let lastRawText = '';
+
+function toggleDebug() {
+  debugMode = !debugMode;
+  const btn = document.getElementById('debug-btn');
+  if (btn) btn.textContent = debugMode ? '🐛 Debug ON' : '🐛 Debug';
+  if (debugMode && lastRawText) showDebugPanel(lastRawText);
+  else hideDebugPanel();
+}
+
+function showDebugPanel(text) {
+  let panel = document.getElementById('debug-panel');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'debug-panel';
+    panel.style.cssText = `
+      position:fixed; bottom:0; left:0; right:0; height:45vh; background:#0a0b0e;
+      border-top:2px solid #e8643a; z-index:9999; display:flex; flex-direction:column;
+      font-family:'DM Mono',monospace; font-size:11px;
+    `;
+    panel.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 16px;border-bottom:1px solid #2a2d3a;background:#111318;">
+        <span style="color:#e8643a;font-weight:500;letter-spacing:0.1em">🐛 DEBUG — TEXTE BRUT EXTRAIT DU PDF</span>
+        <div style="display:flex;gap:8px">
+          <button onclick="copyDebugText()" style="background:#2a2d3a;color:#e8e9f0;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:11px">📋 Copier</button>
+          <button onclick="downloadDebugText()" style="background:#2a2d3a;color:#e8e9f0;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:11px">⬇ Download</button>
+          <button onclick="toggleDebug()" style="background:#e8643a;color:#fff;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:11px">✕ Fermer</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:0;flex:1;overflow:hidden">
+        <div style="flex:1;overflow:auto;padding:12px 16px;border-right:1px solid #2a2d3a">
+          <div style="color:#7a7d8f;margin-bottom:8px;font-size:10px;letter-spacing:0.08em">TEXTE BRUT (${text.split('\n').length} lignes)</div>
+          <pre id="debug-raw" style="color:#e8e9f0;white-space:pre-wrap;line-height:1.6;font-size:11px">${escHtml(text.substring(0, 8000))}${text.length > 8000 ? '\n\n[... tronqué à 8000 chars sur '+text.length+' total]' : ''}</pre>
+        </div>
+        <div style="width:340px;overflow:auto;padding:12px 16px;background:#0e0f13">
+          <div style="color:#7a7d8f;margin-bottom:8px;font-size:10px;letter-spacing:0.08em">LIGNES PARSÉES (numérotées)</div>
+          <pre id="debug-lines" style="color:#5ecf7a;white-space:pre-wrap;line-height:1.6;font-size:10px"></pre>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(panel);
+  } else {
+    panel.style.display = 'flex';
+  }
+
+  document.getElementById('debug-raw').textContent = text.substring(0, 8000) + (text.length > 8000 ? '\n\n[... tronqué]' : '');
+
+  // Show numbered lines
+  const lines = text.split('\n').slice(0, 200);
+  document.getElementById('debug-lines').textContent = lines.map((l,i) => `${String(i+1).padStart(4,' ')} | ${l}`).join('\n');
+}
+
+function hideDebugPanel() {
+  const p = document.getElementById('debug-panel');
+  if (p) p.style.display = 'none';
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function copyDebugText() {
+  navigator.clipboard.writeText(lastRawText).then(() => alert('Texte copié !'));
+}
+
+function downloadDebugText() {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([lastRawText], {type:'text/plain'}));
+  a.download = 'debug_pdf_extract.txt';
+  a.click();
+}
+
 function processText(text) {
-  const txs = parseJournalV2(text);
+  lastRawText = text;
+
+  // Try parsing
+  const txs = parseJournalRobust(text);
+
+  if (debugMode) showDebugPanel(text);
+
   if (txs.length === 0) {
+    // Auto-show debug panel on failure
+    lastRawText = text;
     resetUploadUI();
-    alert('Aucune transaction trouvée. Vérifiez le format du fichier.');
+
+    // Show debug automatically
+    setTimeout(() => {
+      debugMode = true;
+      const btn = document.getElementById('debug-btn');
+      if (btn) btn.textContent = '🐛 Debug ON';
+      showDebugPanel(text);
+    }, 100);
+
+    alert(`Aucune transaction trouvée.\n\nLe panneau DEBUG s'est ouvert — vous pouvez voir le texte brut extrait du PDF et le télécharger pour l'envoyer à votre développeur.`);
     return;
   }
   renderDashboard(txs);
+}
+
+// ============================================================
+// ROBUST PARSER — handles various PDF extraction formats
+// ============================================================
+function parseJournalRobust(text) {
+  // Normalize: collapse multiple spaces, fix encoding
+  const normalized = text
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(/[ \t]+/g, ' ')
+    .trim();
+
+  const lines = normalized.split('\n').map(l => l.trim()).filter(Boolean);
+
+  // DEBUG: log first 30 lines to console
+  console.log('[PARSER] First 30 lines:', lines.slice(0, 30));
+  console.log('[PARSER] Total lines:', lines.length);
+
+  const transactions = [];
+
+  // --- STRATEGY 1: Find TIC markers and group surrounding lines ---
+  // The PDF may have TIC-1-XXXXX on its own line, or merged with employee/date
+
+  let i = 0;
+  let currentDate = '';
+
+  while (i < lines.length) {
+    const l = lines[i];
+
+    // Track date context
+    const dateM = l.match(/(\d{2}\/\d{2}\/\d{4})/);
+    if (dateM) currentDate = dateM[1];
+
+    // Find a TIC line
+    const ticM = l.match(/TIC-1-(\d+)/);
+    if (!ticM) { i++; continue; }
+
+    const ticNum = ticM[1];
+
+    // Scan forward to find "Vente" and then items until "Total Document"
+    let j = i;
+    let foundVente = false;
+    let venteIdx = -1;
+    let totalIdx = -1;
+    let totalTTC = 0;
+
+    // Look ahead up to 5 lines for "Vente"
+    for (let k = i; k < Math.min(i + 6, lines.length); k++) {
+      if (/\bVente\b/i.test(lines[k])) {
+        foundVente = true;
+        venteIdx = k;
+        break;
+      }
+    }
+
+    if (!foundVente) { i++; continue; }
+
+    // Now collect lines from after "Vente" until "Total Document"
+    const itemLines = [];
+    for (let k = venteIdx + 1; k < Math.min(venteIdx + 50, lines.length); k++) {
+      const lk = lines[k];
+      const totalM = lk.match(/Total\s*Document\s*[:\s]+([\d,]+)/i);
+      if (totalM) {
+        totalTTC = parseFloat(totalM[1].replace(',', '.'));
+        totalIdx = k;
+        break;
+      }
+      // Skip tax and payment lines
+      if (/FR Taux/i.test(lk)) continue;
+      if (/Mode de paiement/i.test(lk)) continue;
+      if (/^Rendu\s*:/i.test(lk)) continue;
+      if (/^Sac Papier/i.test(lk)) continue;
+      if (/^Acompte/i.test(lk)) continue;
+      if (/^Bon Cadeau/i.test(lk)) continue;
+      // Avoid picking up next TIC
+      if (/TIC-1-\d+/.test(lk) && lk !== lines[venteIdx]) break;
+
+      if (lk.length > 1) itemLines.push(lk);
+    }
+
+    console.log(`[PARSER] TIC-${ticNum} itemLines:`, itemLines);
+
+    // Parse items from collected lines
+    const items = parseItemLines(itemLines);
+
+    console.log(`[PARSER] TIC-${ticNum} items parsed:`, items);
+
+    if (items.length > 0 || totalTTC > 0) {
+      const htTotal = items.reduce((s, it) => s + it.ht, 0);
+      const cats = items.map(it => classify(it.name, it.ref));
+      const primaryCat = mostCommonCat(cats.filter(c => c !== 'skip'));
+      transactions.push({
+        num: ticNum,
+        date: currentDate || '?',
+        employee: '',
+        items,
+        htTotal,
+        ttc: totalTTC,
+        primaryCat,
+        cats
+      });
+    }
+
+    i = totalIdx >= 0 ? totalIdx + 1 : venteIdx + itemLines.length + 1;
+  }
+
+  console.log(`[PARSER] Total transactions found: ${transactions.length}`);
+  return transactions;
+}
+
+function parseItemLines(lines) {
+  // Join all lines then find patterns: NAME xQTY AMOUNT
+  // Also handle: NAME (multiple lines) followed by xQTY AMOUNT
+  const items = [];
+
+  // First pass: try each line individually for "x N AMOUNT" at end
+  const lineRe = /^(.*?)\s+x\s*(\d+)\s+([\d]{1,6}(?:[.,]\d+)?)\s*$/;
+  // Also try: AMOUNT at end of line only (qty 1 implied, check if line has no x)
+  const amountOnlyRe = /^(.+?)\s+([\d]{1,6}[.,]\d{3,})\s*$/; // only for HT amounts with many decimals
+
+  let pendingName = '';
+
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i];
+
+    const m = l.match(lineRe);
+    if (m) {
+      const rawName = (pendingName ? pendingName + ' ' : '') + m[1].trim();
+      const qty = parseInt(m[2]);
+      const ht = parseFloat(m[3].replace(',', '.'));
+      if (ht > 0.01 && ht < 2000) {
+        const { ref, name } = splitRefName(rawName);
+        items.push({ ref, name, qty, ht });
+      }
+      pendingName = '';
+      continue;
+    }
+
+    // Check if this line is a continuation of a product name (no amount)
+    // i.e. it doesn't end with a number pattern
+    if (!/[\d,]\s*$/.test(l) && !/^[\d]{1,6}[.,]/.test(l)) {
+      pendingName = (pendingName ? pendingName + ' ' : '') + l;
+    } else {
+      // Line ends with a number — might be price-only (qty 1)
+      const m2 = l.match(/^(.*?)\s+([\d]{1,6}[.,]\d+)\s*$/);
+      if (m2) {
+        const ht = parseFloat(m2[2].replace(',', '.'));
+        // Only treat as item if it looks like a HT price (has decimals, not round tax amount)
+        if (ht > 0.01 && ht < 2000 && m2[2].includes(',')) {
+          const rawName = (pendingName ? pendingName + ' ' : '') + m2[1].trim();
+          const { ref, name } = splitRefName(rawName);
+          items.push({ ref, name, qty: 1, ht });
+          pendingName = '';
+          continue;
+        }
+      }
+      pendingName = '';
+    }
+  }
+
+  // Second pass if no items found: try joining all lines and using regex
+  if (items.length === 0) {
+    const full = lines.join(' ');
+    const re = /([^x\d][^x]+?)\s+x\s*(\d+)\s+([\d]{1,6}[.,]\d+)/g;
+    let m;
+    while ((m = re.exec(full)) !== null) {
+      const qty = parseInt(m[2]);
+      const ht = parseFloat(m[3].replace(',', '.'));
+      if (ht > 0.01 && ht < 2000) {
+        const { ref, name } = splitRefName(m[1].trim());
+        items.push({ ref, name, qty, ht });
+      }
+    }
+  }
+
+  return items;
+}
+
+function splitRefName(raw) {
+  // A ref is typically: all-caps alphanumeric possibly with - or .
+  // e.g. POEV0902, AT-11002, BLM134CE, 70445, POKEVT5ELI01
+  const refM = raw.match(/^([A-Z0-9][A-Z0-9\-\.]{2,20})\s+(.+)$/);
+  if (refM) return { ref: refM[1], name: refM[2].trim() };
+  // Pure numeric ref
+  const numM = raw.match(/^(\d{4,})\s+(.+)$/);
+  if (numM) return { ref: numM[1], name: numM[2].trim() };
+  return { ref: '', name: raw.trim() };
 }
 
 // ============================================================
