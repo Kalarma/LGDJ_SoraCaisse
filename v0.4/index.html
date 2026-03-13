@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gentlemen Analytics — Caisse</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  :root {
+    --bg: #090a0f;
+    --surface: #12141c;
+    --surface-light: #1a1d29;
+    --border: #242837;
+    --text: #ffffff;
+    --muted: #83899f;
+    --primary: #4facfe;
+    --tcg: #ff7e5f;
+    --jds: #feb47b;
+    --acc: #a18cd1;
+    --cash: #4ade80;
+    --card: #60a5fa;
+  }
+
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: 'Inter', sans-serif;
+    margin: 0; padding: 1.5rem; line-height: 1.5;
+  }
+
+  .container { max-width: 1100px; margin: 0 auto; }
+
+  header {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    margin-bottom: 2rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border);
+  }
+
+  .brand h1 { margin: 0; font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; }
+  .brand span { color: var(--primary); font-size: 0.75rem; text-transform: uppercase; font-weight: 600; letter-spacing: 0.1em; }
+
+  /* Upload */
+  .upload-zone {
+    background: var(--surface); border: 2px dashed var(--border);
+    padding: 2.5rem; border-radius: 16px; text-align: center;
+    cursor: pointer; transition: 0.2s; margin-bottom: 2rem;
+  }
+  .upload-zone:hover { border-color: var(--primary); background: var(--surface-light); }
+
+  /* Stats Grid */
+  .stats-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem; margin-bottom: 2rem;
+  }
+  .stat-card {
+    background: var(--surface); padding: 1.25rem; border-radius: 12px;
+    border: 1px solid var(--border);
+  }
+  .stat-label { color: var(--muted); font-size: 0.7rem; font-weight: 600; text-transform: uppercase; margin-bottom: 0.5rem; }
+  .stat-value { font-family: 'JetBrains Mono', monospace; font-size: 1.3rem; font-weight: 600; }
+
+  /* Progress Bar */
+  .chart-box {
+    background: var(--surface); padding: 1.5rem; border-radius: 16px;
+    border: 1px solid var(--border); margin-bottom: 2rem;
+  }
+  .progress-wrap { height: 8px; background: var(--border); border-radius: 4px; display: flex; overflow: hidden; margin: 1rem 0; }
+  .progress-bar { height: 100%; transition: 0.4s; }
+  .legend { display: flex; gap: 1.5rem; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; font-weight: 500; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; }
+
+  /* Tickets */
+  .ticket {
+    background: var(--surface); border-radius: 12px; border: 1px solid var(--border);
+    margin-bottom: 1rem; overflow: hidden;
+  }
+  .ticket-head {
+    padding: 0.8rem 1.2rem; background: rgba(255,255,255,0.03);
+    display: flex; justify-content: space-between; align-items: center;
+    border-bottom: 1px solid var(--border); font-size: 0.85rem;
+  }
+  .ticket-body { padding: 1.2rem; }
+  
+  .item-row {
+    display: grid; grid-template-columns: 100px 1fr 40px 80px;
+    gap: 1rem; font-size: 0.85rem; padding: 0.4rem 0;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+  }
+  .item-ref { color: var(--muted); font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; }
+  .item-total { text-align: right; font-weight: 600; font-family: 'JetBrains Mono', monospace; }
+
+  .badge {
+    padding: 3px 10px; border-radius: 6px; font-size: 0.65rem; font-weight: 700;
+  }
+  .badge-cb { background: rgba(96,165,250,0.15); color: var(--card); border: 1px solid rgba(96,165,250,0.3); }
+  .badge-cash { background: rgba(74,222,128,0.15); color: var(--cash); border: 1px solid rgba(74,222,128,0.3); }
+
+  .ticket-footer {
+    margin-top: 1rem; padding-top: 0.8rem; border-top: 1px dashed var(--border);
+    display: flex; justify-content: flex-end; align-items: center; gap: 1rem;
+  }
+
+  .btn-debug {
+    background: transparent; color: #ff5555; border: 1px solid #ff5555;
+    padding: 4px 10px; border-radius: 6px; font-size: 0.7rem; cursor: pointer;
+  }
+
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <div class="brand">
+      <span>Analytics Interne</span>
+      <h1>Les Gentlemen du Jeu</h1>
+    </div>
+    <button id="debugBtn" class="btn-debug hidden">Debug Log</button>
+  </header>
+
+  <div id="dropZone" class="upload-zone">
+    <p style="font-weight: 600; margin-bottom: 0.5rem;">Déposez le journal de caisse PDF</p>
+    <p style="color: var(--muted); font-size: 0.85rem;">Analyse automatique des tickets et catégories</p>
+    <input type="file" id="fileInput" class="hidden" accept=".pdf">
+  </div>
+
+  <div id="results" class="hidden">
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">Total CB (TTC)</div>
+        <div id="totalCB" class="stat-value" style="color: var(--card)">0,00 €</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Total Espèces</div>
+        <div id="totalCash" class="stat-value" style="color: var(--cash)">0,00 €</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Chiffre d'Affaires</div>
+        <div id="totalGlobal" class="stat-value">0,00 €</div>
+      </div>
+    </div>
+
+    <div class="chart-box">
+      <div class="stat-label">Répartition des ventes</div>
+      <div class="progress-wrap" id="progressWrap"></div>
+      <div class="legend" id="legend"></div>
+    </div>
+
+    <div id="ticketsList"></div>
+  </div>
+</div>
+
+<script>
+  const pdfjsLib = window['pdfjs-dist/build/pdf'];
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+  let rawLog = "";
+  const dropZone = document.getElementById('dropZone');
+  const fileInput = document.getElementById('fileInput');
+
+  dropZone.onclick = () => fileInput.click();
+  fileInput.onchange = (e) => { if(e.target.files[0]) processPDF(e.target.files[0]); };
+
+  async function processPDF(file) {
+    const reader = new FileReader();
+    reader.onload = async function() {
+      const typedarray = new Uint8Array(this.result);
+      const pdf = await pdfjsLib.getDocument(typedarray).promise;
+      let fullText = "";
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        fullText += content.items.map(item => item.str).join(' ') + " \n";
+      }
+      rawLog = fullText;
+      document.getElementById('debugBtn').classList.remove('hidden');
+      analyzeData(fullText);
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function analyzeData(text) {
+    const cleanText = text.replace(/\s+/g, ' ');
+    // Découpage optimisé par ticket
+    const ticketBlocks = cleanText.split(/(?=\d{2}\/\d{2}\/\d{4}\s+[\w\s]+TIC-1)/);
+    
+    let stats = { cb: 0, cash: 0, total: 0, tcg: 0, jds: 0, acc: 0 };
+    const tickets = [];
+
+    ticketBlocks.forEach(block => {
+      if(!block.includes('TIC-1')) return;
+
+      const totalMatch = block.match(/Total Document\s?:\s?([\d,.]+)/);
+      if(!totalMatch) return;
+
+      const ticket = {
+        date: block.match(/\d{2}\/\d{2}\/\d{4}/)?.[0] || "",
+        id: block.match(/TIC-1-\d+/)?.[0] || "",
+        vendeur: block.match(/(Trignol Robin|Employé\s\w+)/)?.[0] || "Equipe",
+        paiement: (block.includes('Carte') || block.includes('Bancaire')) ? 'CB' : 'Espèces',
+        total: parseFloat(totalMatch[1].replace(',', '.')),
+        items: []
+      };
+
+      // Extraction robuste des articles
+      const itemRegex = /([A-Z0-9-]{3,})\s+(.*?)\s+x\s+(\d+)\s+([\d,.]+)/g;
+      let m;
+      while ((m = itemRegex.exec(block)) !== null) {
+        const sub = parseFloat(m[4].replace(',', '.')) * 1.20 * parseInt(m[3]);
+        const ref = m[1];
+        ticket.items.push({ ref: ref, name: m[2].trim(), qty: m[3], sub: sub });
+
+        // Catégories
+        if (ref.match(/^(OP|PK|LOR|YGO|MTG|SW|ONE|POB)/)) stats.tcg += sub;
+        else if (ref.match(/^(ACC|PROT|ULT|SPS)/)) stats.acc += sub;
+        else stats.jds += sub;
+      }
+
+      if(ticket.paiement === 'CB') stats.cb += ticket.total; else stats.cash += ticket.total;
+      stats.total += ticket.total;
+      tickets.push(ticket);
+    });
+
+    render(tickets, stats);
+  }
+
+  function render(tickets, stats) {
+    document.getElementById('results').classList.remove('hidden');
+    document.getElementById('totalCB').textContent = stats.cb.toFixed(2) + " €";
+    document.getElementById('totalCash').textContent = stats.cash.toFixed(2) + " €";
+    document.getElementById('totalGlobal').textContent = stats.total.toFixed(2) + " €";
+
+    // Barre de progression
+    const cats = [
+      { label: 'TCG', val: stats.tcg, color: 'var(--tcg)' },
+      { label: 'Jeux', val: stats.jds, color: 'var(--jds)' },
+      { label: 'Accessoires', val: stats.acc, color: 'var(--acc)' }
+    ];
+    
+    const wrap = document.getElementById('progressWrap');
+    const legend = document.getElementById('legend');
+    wrap.innerHTML = ''; legend.innerHTML = '';
+
+    cats.forEach(c => {
+      const p = (c.val / (stats.total || 1)) * 100;
+      if(p > 1) {
+        wrap.innerHTML += `<div class="progress-bar" style="width:${p}%; background:${c.color}"></div>`;
+        legend.innerHTML += `<div class="legend-item"><div class="dot" style="background:${c.color}"></div>${c.label} <b>${p.toFixed(1)}%</b></div>`;
+      }
+    });
+
+    // Liste Tickets
+    const list = document.getElementById('ticketsList');
+    list.innerHTML = '';
+    tickets.reverse().forEach(t => {
+      list.innerHTML += `
+        <div class="ticket">
+          <div class="ticket-head">
+            <span><b>${t.id}</b> — ${t.date}</span>
+            <span class="badge ${t.paiement === 'CB' ? 'badge-cb' : 'badge-cash'}">${t.paiement}</span>
+          </div>
+          <div class="ticket-body">
+            ${t.items.map(i => `
+              <div class="item-row">
+                <span class="item-ref">${i.ref}</span>
+                <span style="font-weight:500">${i.name}</span>
+                <span style="color:var(--muted)">x${i.qty}</span>
+                <span class="item-total">${i.sub.toFixed(2)}€</span>
+              </div>
+            `).join('')}
+            <div class="ticket-footer">
+              <span style="font-size:0.75rem; color:var(--muted)">Vendu par ${t.vendeur}</span>
+              <span style="font-size:1.1rem; font-weight:700">${t.total.toFixed(2)} €</span>
+            </div>
+          </div>
+        </div>`;
+    });
+  }
+
+  document.getElementById('debugBtn').onclick = () => {
+    const blob = new Blob([rawLog], {type: 'text/plain'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = "debug_gentlemen.txt"; a.click();
+  };
+</script>
+</body>
+</html>
