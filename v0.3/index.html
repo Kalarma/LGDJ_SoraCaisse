@@ -25,8 +25,7 @@
   }
 
   body {
-    background: var(--bg);
-    color: var(--text);
+    background: var(--bg); color: var(--text);
     font-family: 'Plus Jakarta Sans', sans-serif;
     margin: 0; padding: 2rem; line-height: 1.6;
   }
@@ -35,10 +34,10 @@
 
   header { 
     display: flex; justify-content: space-between; align-items: center;
-    margin-bottom: 3rem; border-bottom: 1px solid var(--border); padding-bottom: 1.5rem;
+    margin-bottom: 2rem; border-bottom: 1px solid var(--border); padding-bottom: 1.5rem;
   }
 
-  h1 { font-size: 1.8rem; font-weight: 700; margin: 0; letter-spacing: -0.02em; }
+  h1 { font-size: 1.8rem; font-weight: 700; margin: 0; }
   .brand { color: var(--primary); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.2em; display: block; }
 
   .upload-zone {
@@ -48,12 +47,10 @@
   }
   .upload-zone:hover { border-color: var(--primary); background: var(--surface-hover); }
 
-  .debug-bar { display: flex; justify-content: flex-end; margin-bottom: 2rem; }
   .btn-debug {
     background: #331111; color: #ff8888; border: 1px solid #552222;
-    padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 0.75rem; font-weight: 600;
+    padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 0.75rem;
   }
-  .btn-debug:hover { background: #441111; }
 
   .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
   .stat-card { background: var(--surface); padding: 1.25rem; border-radius: 16px; border: 1px solid var(--border); }
@@ -79,8 +76,8 @@
     font-size: 0.85rem;
   }
   .ticket-body { padding: 1rem 1.25rem; }
-  .item-row { display: flex; justify-content: space-between; font-size: 0.9rem; padding: 0.25rem 0; }
-  .item-ref { color: var(--muted); font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; width: 120px; }
+  .item-row { display: flex; justify-content: space-between; font-size: 0.85rem; padding: 0.3rem 0; border-bottom: 1px solid rgba(255,255,255,0.02); }
+  .item-ref { color: var(--muted); font-family: 'JetBrains Mono', monospace; width: 100px; }
   
   .badge { padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; }
   .badge-cb { background: rgba(96, 165, 250, 0.2); color: var(--card); border: 1px solid var(--card); }
@@ -94,24 +91,21 @@
 <div class="container">
   <header>
     <div>
-      <span class="brand">Outil Analyse Interne</span>
-      <h1>Les Gentlemen du Jeu</h1>
+      <span class="brand">Système d'Analyse Gentlemen du Jeu</span>
+      <h1>Dashboard Journal de Caisse</h1>
     </div>
+    <button id="debugBtn" class="btn-debug hidden">🐞 Log de Debug</button>
   </header>
   
   <div class="upload-zone" id="dropZone">
-    <p>Glissez le PDF ici ou cliquez pour parcourir</p>
+    <p>Glissez le PDF du journal ici</p>
     <input type="file" id="fileInput" class="hidden" accept=".pdf">
-  </div>
-
-  <div class="debug-bar">
-    <button id="debugBtn" class="btn-debug hidden">🐞 Télécharger log de debug</button>
   </div>
 
   <div id="results" class="hidden">
     <div class="dashboard">
       <div class="stat-card">
-        <div class="stat-label">Total CB (TTC)</div>
+        <div class="stat-label">Total CB</div>
         <div id="totalCB" class="stat-value" style="color: var(--card)">0,00 €</div>
       </div>
       <div class="stat-card">
@@ -119,13 +113,13 @@
         <div id="totalCash" class="stat-value" style="color: var(--cash)">0,00 €</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">CA Global TTC</div>
+        <div class="stat-label">CA Total TTC</div>
         <div id="totalGlobal" class="stat-value">0,00 €</div>
       </div>
     </div>
 
     <div class="breakdown-container">
-      <div class="stat-label">Répartition par Catégorie</div>
+      <div class="stat-label">Répartition du Chiffre d'Affaires</div>
       <div class="progress-stack" id="progressStack"></div>
       <div class="legend" id="legend"></div>
     </div>
@@ -138,10 +132,9 @@
   const pdfjsLib = window['pdfjs-dist/build/pdf'];
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-  let debugData = "";
+  let rawLog = "";
   const dropZone = document.getElementById('dropZone');
   const fileInput = document.getElementById('fileInput');
-  const debugBtn = document.getElementById('debugBtn');
 
   dropZone.onclick = () => fileInput.click();
   fileInput.onchange = (e) => { if(e.target.files[0]) processPDF(e.target.files[0]); };
@@ -157,57 +150,63 @@
         const content = await page.getTextContent();
         fullText += content.items.map(item => item.str).join(' ') + " \n";
       }
-      debugData = fullText;
-      debugBtn.classList.remove('hidden');
+      rawLog = fullText;
+      document.getElementById('debugBtn').classList.remove('hidden');
       analyzeTickets(fullText);
     };
     reader.readAsArrayBuffer(file);
   }
 
   function analyzeTickets(text) {
+    // Nettoyage agressif des espaces multiples pour stabiliser la Regex
     const cleanText = text.replace(/\s+/g, ' ');
-    const ticketBlocks = cleanText.split(/(?=\d{2}\/\d{2}\/\d{4}\s+TIC)/);
+    
+    // Découpage par ticket (on cherche une date suivie de TIC-)
+    const ticketBlocks = cleanText.split(/(?=\d{2}\/\d{2}\/\d{4}\s+[\w\s]+TIC-1)/);
     
     let stats = { cb: 0, cash: 0, total: 0, tcg: 0, jds: 0, puz: 0, acc: 0 };
     const tickets = [];
 
     ticketBlocks.forEach(block => {
-      if(!block.includes('TIC-')) return;
+      if(!block.includes('TIC-1')) return;
+
+      // On isole le montant final du ticket (Total Document)
+      const totalDocMatch = block.match(/Total Document\s?:\s?([\d,.]+)/);
+      if (!totalDocMatch) return;
+      const totalTicket = parseFloat(totalDocMatch[1].replace(',', '.'));
 
       const ticket = {
         date: block.match(/\d{2}\/\d{2}\/\d{4}/)?.[0] || "",
-        vendeur: block.match(/Trignol Robin|Employé\s\w+/)?.[0] || "Equipe",
-        id: block.match(/TIC-\d+-\d+/)?.[0] || "",
+        vendeur: block.match(/(Trignol Robin|Employé\s\w+)/)?.[0] || "Équipe",
+        id: block.match(/TIC-1-\d+/)?.[0] || "Inconnu",
         items: [],
-        paiement: 'Inconnu',
-        totalTTC: parseFloat(block.match(/Total Document\s?:\s?([\d,.]+)/)?.[1]?.replace(',', '.') || 0)
+        paiement: (block.includes('Carte') || block.includes('Bancaire')) ? 'CB' : (block.includes('Espèces') ? 'Espèces' : 'Autre'),
+        totalTTC: totalTicket
       };
 
-      // Détection paiement plus robuste
-      if (block.includes('Carte Bancaire') || block.includes('Bancaire')) ticket.paiement = 'CB';
-      else if (block.includes('Espèces')) ticket.paiement = 'Espèces';
-
+      // Extraction des articles : [REF] [NOM] x [QTÉ] [PRIX HT]
       const itemRegex = /([A-Z0-9-]{4,})\s+(.*?)\s+x\s+(\d+)\s+([\d,.]+)/g;
       let m;
       while ((m = itemRegex.exec(block)) !== null) {
         const ref = m[1];
         const name = m[2].trim();
         const qty = parseInt(m[3]);
-        const priceTTC = parseFloat(m[4].replace(',', '.')) * 1.20;
-        const subtotal = priceTTC * qty;
+        const priceHT = parseFloat(m[4].replace(',', '.'));
+        const subtotalTTC = (priceHT * 1.20) * qty; // Approximation par ligne pour la catégorie
 
-        ticket.items.push({ ref, name, qty, subtotal });
+        ticket.items.push({ ref, name, qty, subtotal: subtotalTTC });
 
-        if (ref.match(/^(OP|PK|LOR|YGO|MTG|SW|ONE)/)) stats.tcg += subtotal;
-        else if (ref.match(/^(PUZ|EDU)/)) stats.puz += subtotal;
-        else if (ref.match(/^(ACC|PROT|ULT)/)) stats.acc += subtotal;
-        else stats.jds += subtotal;
+        // Catégories Gentlemen
+        if (ref.match(/^(OP|PK|LOR|YGO|MTG|SW|ONE|POB)/)) stats.tcg += subtotalTTC;
+        else if (ref.match(/^(PUZ|EDU)/)) stats.puz += subtotalTTC;
+        else if (ref.match(/^(ACC|PROT|ULT|SPS)/)) stats.acc += subtotalTTC;
+        else stats.jds += subtotalTTC;
       }
 
-      if(ticket.paiement === 'CB') stats.cb += ticket.totalTTC;
-      else if(ticket.paiement === 'Espèces') stats.cash += ticket.totalTTC;
+      if(ticket.paiement === 'CB') stats.cb += totalTicket;
+      else if(ticket.paiement === 'Espèces') stats.cash += totalTicket;
       
-      stats.total += ticket.totalTTC;
+      stats.total += totalTicket;
       tickets.push(ticket);
     });
 
@@ -233,14 +232,14 @@
 
     categories.forEach(cat => {
       const p = (cat.val / (stats.total || 1)) * 100;
-      if(p > 0) {
+      if(p > 1) {
         stack.innerHTML += `<div class="progress-bar" style="width: ${p}%; background: ${cat.color}"></div>`;
         legend.innerHTML += `<div class="legend-item"><div class="dot" style="background:${cat.color}"></div><span>${cat.label} <b>${p.toFixed(1)}%</b></span></div>`;
       }
     });
 
     const container = document.getElementById('ticketsContainer');
-    container.innerHTML = '<div class="stat-label" style="margin: 2rem 0 1rem;">Historique des Tickets</div>';
+    container.innerHTML = '<div class="stat-label" style="margin: 2rem 0 1rem;">Détail des Transactions</div>';
     
     tickets.reverse().forEach(t => {
       const bClass = t.paiement === 'CB' ? 'badge-cb' : 'badge-cash';
@@ -253,20 +252,17 @@
           </div>
           <div class="ticket-body">
             ${t.items.map(i => `<div class="item-row"><span class="item-ref">${i.ref}</span><span style="flex:1">${i.name} <b>x${i.qty}</b></span><span>${i.subtotal.toFixed(2)}€</span></div>`).join('')}
-            <div style="text-align:right; margin-top:0.8rem; padding-top:0.5rem; border-top:1px solid var(--border); font-weight:700">Total: ${t.totalTTC.toFixed(2)} €</div>
+            <div style="text-align:right; margin-top:0.8rem; padding-top:0.5rem; border-top:1px solid var(--border); font-weight:700">Total Ticket: ${t.totalTTC.toFixed(2)} €</div>
           </div>
         </div>`;
     });
   }
 
-  // Fonction de Debug pour m'envoyer les erreurs
-  debugBtn.onclick = () => {
-    const blob = new Blob([debugData], {type: 'text/plain'});
+  document.getElementById('debugBtn').onclick = () => {
+    const blob = new Blob([rawLog], {type: 'text/plain'});
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url;
-    a.download = "debug_gentlemen_jeu.txt";
-    a.click();
+    a.href = url; a.download = "debug_gentlemen.txt"; a.click();
   };
 </script>
 </body>
