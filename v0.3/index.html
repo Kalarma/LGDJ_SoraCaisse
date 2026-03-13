@@ -3,188 +3,132 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Analyse Journal de Caisse — Les Gentlemen du Jeu</title>
+<title>Analytics Caisse — Les Gentlemen du Jeu</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500;600&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
   :root {
-    --bg: #0e0f13;
-    --surface: #16181f;
-    --surface2: #1e2029;
-    --border: #2a2d3a;
-    --text: #e8e9f0;
-    --muted: #7a7d8f;
-    --primary: #4a9fd4; /* Bleu Gentlemen du Jeu */
-    --tcg: #e8643a;
-    --success: #4ade80;
+    --bg: #0b0d11;
+    --surface: #15181f;
+    --surface-hover: #1c2029;
+    --border: #262a35;
+    --text: #f0f2f5;
+    --muted: #8a919e;
+    --primary: #4a9fd4; 
+    --tcg: #ff7e5f;
+    --jds: #feb47b;
+    --acc: #a18cd1;
+    --puz: #4facfe;
+    --cash: #4ade80;
+    --card: #60a5fa;
   }
 
   body {
     background: var(--bg);
     color: var(--text);
-    font-family: 'DM Sans', sans-serif;
-    margin: 0;
-    padding: 2rem;
-    line-height: 1.5;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    margin: 0; padding: 2rem; line-height: 1.6;
   }
 
-  .container {
-    max-width: 1100px;
-    margin: 0 auto;
+  .container { max-width: 1200px; margin: 0 auto; }
+
+  header { 
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 3rem; border-bottom: 1px solid var(--border); padding-bottom: 1.5rem;
   }
 
-  header {
-    margin-bottom: 3rem;
-    border-bottom: 1px solid var(--border);
-    padding-bottom: 1rem;
-  }
+  h1 { font-size: 1.8rem; font-weight: 700; margin: 0; letter-spacing: -0.02em; }
+  .brand { color: var(--primary); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.2em; display: block; }
 
-  h1 {
-    font-family: 'DM Serif Display', serif;
-    font-size: 2.2rem;
-    margin: 0;
-    color: var(--text);
-  }
-
-  .subtitle {
-    color: var(--primary);
-    font-weight: 600;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    font-size: 0.8rem;
-  }
-
+  /* Upload Zone */
   .upload-zone {
     border: 2px dashed var(--border);
-    padding: 4rem 2rem;
-    text-align: center;
-    border-radius: 16px;
-    background: var(--surface);
-    cursor: pointer;
-    transition: all 0.3s ease;
-    margin-bottom: 2rem;
+    padding: 3rem; text-align: center; border-radius: 20px;
+    background: var(--surface); cursor: pointer; transition: 0.3s; margin-bottom: 2rem;
   }
+  .upload-zone:hover { border-color: var(--primary); background: var(--surface-hover); }
 
-  .upload-zone:hover {
-    border-color: var(--primary);
-    background: var(--surface2);
+  /* Stats Bar */
+  .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+  .stat-card { background: var(--surface); padding: 1.25rem; border-radius: 16px; border: 1px solid var(--border); }
+  .stat-label { color: var(--muted); font-size: 0.75rem; font-weight: 600; text-transform: uppercase; margin-bottom: 0.5rem; }
+  .stat-value { font-family: 'JetBrains Mono', monospace; font-size: 1.4rem; font-weight: 600; }
+
+  /* Breakdown Chart (Pure CSS) */
+  .breakdown-container {
+    background: var(--surface); padding: 1.5rem; border-radius: 16px; border: 1px solid var(--border); margin-bottom: 2rem;
   }
+  .progress-stack { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: var(--border); margin: 1.5rem 0; }
+  .progress-bar { height: 100%; transition: width 0.5s ease; }
+  .legend { display: flex; gap: 1.5rem; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; }
 
-  .dashboard {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 1.5rem;
-    margin-bottom: 2rem;
+  /* Tickets Display */
+  .ticket-card {
+    background: var(--surface); border-radius: 12px; border: 1px solid var(--border);
+    margin-bottom: 1rem; overflow: hidden;
   }
-
-  .stat-card {
-    background: var(--surface);
-    padding: 1.5rem;
-    border-radius: 12px;
-    border: 1px solid var(--border);
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  .ticket-header {
+    padding: 0.75rem 1.25rem; background: rgba(255,255,255,0.03);
+    display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border);
+    font-size: 0.85rem;
   }
-
-  .stat-label {
-    color: var(--muted);
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    font-weight: 600;
+  .ticket-body { padding: 1rem 1.25rem; }
+  .item-row { display: flex; justify-content: space-between; font-size: 0.9rem; padding: 0.25rem 0; }
+  .item-ref { color: var(--muted); font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; width: 120px; }
+  .item-name { flex-grow: 1; }
+  
+  .badge {
+    padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
   }
-
-  .stat-value {
-    font-family: 'DM Mono', monospace;
-    font-size: 1.8rem;
-    font-weight: 500;
-    margin-top: 0.5rem;
-    color: var(--text);
-  }
-
-  .stat-value.highlight { color: var(--primary); }
-  .stat-value.tcg { color: var(--tcg); }
-
-  .table-container {
-    background: var(--surface);
-    border-radius: 12px;
-    border: 1px solid var(--border);
-    overflow: hidden;
-  }
-
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.9rem;
-  }
-
-  th {
-    text-align: left;
-    padding: 1rem;
-    background: var(--surface2);
-    color: var(--muted);
-    font-weight: 600;
-    text-transform: uppercase;
-    font-size: 0.7rem;
-  }
-
-  td {
-    padding: 1rem;
-    border-top: 1px solid var(--border);
-    font-family: 'DM Mono', monospace;
-  }
-
-  tr:hover { background: rgba(255,255,255,0.02); }
+  .badge-cb { background: rgba(96, 165, 250, 0.2); color: var(--card); border: 1px solid var(--card); }
+  .badge-cash { background: rgba(74, 222, 128, 0.2); color: var(--cash); border: 1px solid var(--cash); }
 
   .hidden { display: none; }
+  .text-primary { color: var(--primary); }
 </style>
 </head>
 <body>
 
 <div class="container">
   <header>
-    <div class="subtitle">Outil d'Analyse Interne</div>
-    <h1>Les Gentlemen du Jeu</h1>
+    <div>
+      <span class="brand">Outil Analyse Journal</span>
+      <h1>Les Gentlemen du Jeu</h1>
+    </div>
+    <div id="dateRange" style="text-align: right; color: var(--muted); font-size: 0.8rem;"></div>
   </header>
   
   <div class="upload-zone" id="dropZone">
-    <p>Glissez le PDF du journal de caisse ici</p>
-    <p style="font-size: 0.8rem; color: var(--muted);">Ou cliquez pour sélectionner un fichier</p>
+    <p>Glissez le PDF ici ou cliquez pour parcourir</p>
     <input type="file" id="fileInput" class="hidden" accept=".pdf">
   </div>
 
   <div id="results" class="hidden">
     <div class="dashboard">
       <div class="stat-card">
-        <div class="stat-label">Chiffre d'Affaires Global</div>
-        <div id="totalTTC" class="stat-value highlight">0,00 €</div>
+        <div class="stat-label">Total CB (TTC)</div>
+        <div id="totalCB" class="stat-value text-primary">0,00 €</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Ventes TCG</div>
-        <div id="totalTCG" class="stat-value tcg">0,00 €</div>
+        <div class="stat-label">Total Espèces</div>
+        <div id="totalCash" class="stat-value" style="color: var(--cash)">0,00 €</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Ventes Jeux / Divers</div>
-        <div id="totalMisc" class="stat-value">0,00 €</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Articles Vendus</div>
-        <div id="totalQty" class="stat-value">0</div>
+        <div class="stat-label">CA Global TTC</div>
+        <div id="totalGlobal" class="stat-value">0,00 €</div>
       </div>
     </div>
 
-    <div class="table-container">
-      <table id="ventesTable">
-        <thead>
-          <tr>
-            <th>Référence</th>
-            <th>Désignation Article</th>
-            <th style="text-align: center;">Qté</th>
-            <th style="text-align: right;">Total TTC</th>
-          </tr>
-        </thead>
-        <tbody id="ventesBody"></tbody>
-      </table>
+    <div class="breakdown-container">
+      <div class="stat-label">Répartition du Chiffre d'Affaires</div>
+      <div class="progress-stack" id="progressStack"></div>
+      <div class="legend" id="legend"></div>
     </div>
+
+    <div id="ticketsContainer"></div>
   </div>
 </div>
 
@@ -196,11 +140,7 @@
   const fileInput = document.getElementById('fileInput');
 
   dropZone.onclick = () => fileInput.click();
-  
-  fileInput.onchange = async (e) => {
-    const file = e.target.files[0];
-    if (file) processPDF(file);
-  };
+  fileInput.onchange = (e) => { if(e.target.files[0]) processPDF(e.target.files[0]); };
 
   async function processPDF(file) {
     const reader = new FileReader();
@@ -208,79 +148,124 @@
       const typedarray = new Uint8Array(this.result);
       const pdf = await pdfjsLib.getDocument(typedarray).promise;
       let fullText = "";
-
       for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
         const content = await page.getTextContent();
-        // On remplace les sauts de ligne par des espaces pour simplifier la Regex
         fullText += content.items.map(item => item.str).join(' ') + " \n";
       }
-      
-      parseExtractionData(fullText);
+      analyzeTickets(fullText);
     };
     reader.readAsArrayBuffer(file);
   }
 
-  function parseExtractionData(text) {
-    // Nettoyage : On normalise les espaces et on traite les virgules décimales
+  function analyzeTickets(text) {
+    // Normalisation pour éviter les coupures de mots
     const cleanText = text.replace(/\s+/g, ' ');
     
-    const sales = [];
-    let totalTTC = 0;
-    let totalTCG = 0;
-    let totalQty = 0;
-
-    // Cette Regex cible la structure spécifique de vos logs : 
-    // [REFERENCE] [Nom de l'article] x [Quantité] [Prix HT]
-    // Exemple : OP12BOFR One Piece ... x 1 5,833333
-    const saleRegex = /([A-Z0-9-]{4,})\s+(.*?)\s+x\s+(\d+)\s+([\d,.]+)/g;
+    // On sépare par ticket (TIC-X-XXXXXX)
+    const ticketBlocks = cleanText.split(/(?=\d{2}\/\d{2}\/\d{4}\s+TIC)/);
     
-    let match;
-    while ((match = saleRegex.exec(cleanText)) !== null) {
-      const ref = match[1];
-      const name = match[2].trim();
-      const qty = parseInt(match[3]);
-      // Le prix dans le log est HT, on convertit en TTC (20%)
-      const priceHT = parseFloat(match[4].replace(',', '.'));
-      const priceTTC = priceHT * 1.20; 
-      const totalItemTTC = priceTTC * qty;
+    let stats = { cb: 0, cash: 0, total: 0, tcg: 0, jds: 0, puz: 0, acc: 0 };
+    const tickets = [];
 
-      sales.push({ ref, name, qty, total: totalItemTTC });
+    ticketBlocks.forEach(block => {
+      if(!block.includes('TIC-')) return;
 
-      // Logique de tri TCG (One Piece, Lorcana, etc.)
-      if (ref.startsWith('OP') || ref.startsWith('LOR') || ref.startsWith('PKM') || name.toUpperCase().includes('ONE PIECE')) {
-        totalTCG += totalItemTTC;
+      const ticket = {
+        date: block.match(/\d{2}\/\d{2}\/\d{4}/)?.[0] || "",
+        vendeur: block.match(/Trignol Robin|Employé\s\w+/)?.[0] || "Inconnu",
+        id: block.match(/TIC-\d+-\d+/)?.[0] || "",
+        items: [],
+        paiement: block.includes('Carte Bancaire') ? 'CB' : (block.includes('Espèces') ? 'Espèces' : 'Autre'),
+        totalTTC: parseFloat(block.match(/Total Document\s?:\s?([\d,.]+)/)?.[1]?.replace(',', '.') || 0)
+      };
+
+      // Extraction des produits dans ce bloc
+      const itemRegex = /([A-Z0-9-]{4,})\s+(.*?)\s+x\s+(\d+)\s+([\d,.]+)/g;
+      let itemMatch;
+      while ((itemMatch = itemRegex.exec(block)) !== null) {
+        const ref = itemMatch[1];
+        const name = itemMatch[2].trim();
+        const qty = parseInt(itemMatch[3]);
+        const priceTTC = parseFloat(itemMatch[4].replace(',', '.')) * 1.20;
+        const subtotal = priceTTC * qty;
+
+        ticket.items.push({ ref, name, qty, subtotal });
+
+        // Classification
+        if (ref.match(/^(OP|PK|LOR|YGO|MTG|SW)/)) stats.tcg += subtotal;
+        else if (ref.match(/^(PUZ|EDU)/)) stats.puz += subtotal;
+        else if (ref.match(/^(ACC|PROT)/)) stats.acc += subtotal;
+        else stats.jds += subtotal;
       }
-      
-      totalTTC += totalItemTTC;
-      totalQty += qty;
-    }
 
-    // Extraction spécifique du mode de paiement si nécessaire (optionnel)
-    // On peut aussi chercher "Total Document : 21,90" pour vérifier
-    
-    displayResults(sales, totalTTC, totalTCG, totalQty);
+      if(ticket.paiement === 'CB') stats.cb += ticket.totalTTC;
+      else if(ticket.paiement === 'Espèces') stats.cash += ticket.totalTTC;
+      
+      stats.total += ticket.totalTTC;
+      tickets.push(ticket);
+    });
+
+    renderUI(tickets, stats);
   }
 
-  function displayResults(sales, totalTTC, totalTCG, totalQty) {
+  function renderUI(tickets, stats) {
     document.getElementById('results').classList.remove('hidden');
-    document.getElementById('totalTTC').textContent = totalTTC.toLocaleString('fr-FR', {style: 'currency', currency: 'EUR'});
-    document.getElementById('totalTCG').textContent = totalTCG.toLocaleString('fr-FR', {style: 'currency', currency: 'EUR'});
-    document.getElementById('totalMisc').textContent = (totalTTC - totalTCG).toLocaleString('fr-FR', {style: 'currency', currency: 'EUR'});
-    document.getElementById('totalQty').textContent = totalQty;
+    document.getElementById('totalCB').textContent = stats.cb.toFixed(2) + " €";
+    document.getElementById('totalCash').textContent = stats.cash.toFixed(2) + " €";
+    document.getElementById('totalGlobal').textContent = stats.total.toFixed(2) + " €";
 
-    const body = document.getElementById('ventesBody');
-    body.innerHTML = '';
+    // Barre de répartition
+    const categories = [
+      { label: 'TCG', val: stats.tcg, color: 'var(--tcg)' },
+      { label: 'Jeux', val: stats.jds, color: 'var(--jds)' },
+      { label: 'Puzzles', val: stats.puz, color: 'var(--puz)' },
+      { label: 'Accessoires', val: stats.acc, color: 'var(--acc)' }
+    ];
+
+    const stack = document.getElementById('progressStack');
+    const legend = document.getElementById('legend');
+    stack.innerHTML = ''; legend.innerHTML = '';
+
+    categories.forEach(cat => {
+      const percent = (cat.val / (stats.total || 1)) * 100;
+      if(percent > 0) {
+        stack.innerHTML += `<div class="progress-bar" style="width: ${percent}%; background: ${cat.color}"></div>`;
+        legend.innerHTML += `
+          <div class="legend-item">
+            <div class="dot" style="background: ${cat.color}"></div>
+            <span style="font-weight:600">${cat.label}</span>
+            <span style="color:var(--muted)">${percent.toFixed(1)}%</span>
+          </div>`;
+      }
+    });
+
+    // Liste des tickets
+    const container = document.getElementById('ticketsContainer');
+    container.innerHTML = '<div class="stat-label" style="margin-bottom:1rem">Détail des Transactions</div>';
     
-    // On trie par montant décroissant pour la vue
-    sales.sort((a, b) => b.total - a.total).forEach(s => {
-      const row = `<tr>
-        <td style="color: var(--muted)">${s.ref}</td>
-        <td>${s.name}</td>
-        <td style="text-align: center;">${s.qty}</td>
-        <td style="text-align: right; font-weight: 500;">${s.total.toFixed(2)} €</td>
-      </tr>`;
-      body.innerHTML += row;
+    tickets.reverse().forEach(t => {
+      const badgeClass = t.paiement === 'CB' ? 'badge-cb' : 'badge-cash';
+      container.innerHTML += `
+        <div class="ticket-card">
+          <div class="ticket-header">
+            <span><strong>${t.date}</strong> — ${t.id}</span>
+            <span>Vendeur : <strong>${t.vendeur}</strong></span>
+            <span class="badge ${badgeClass}">${t.paiement}</span>
+          </div>
+          <div class="ticket-body">
+            ${t.items.map(i => `
+              <div class="item-row">
+                <span class="item-ref">${i.ref}</span>
+                <span class="item-name">${i.name} <strong>x${i.qty}</strong></span>
+                <span style="font-family: 'JetBrains Mono'">${i.subtotal.toFixed(2)}€</span>
+              </div>
+            `).join('')}
+            <div style="text-align:right; margin-top:0.5rem; padding-top:0.5rem; border-top:1px solid var(--border); font-weight:700">
+              Total Ticket : ${t.totalTTC.toFixed(2)} €
+            </div>
+          </div>
+        </div>`;
     });
   }
 </script>
